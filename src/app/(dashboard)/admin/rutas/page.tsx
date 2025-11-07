@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -10,82 +9,80 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { Search, Eye, CheckCircle, XCircle, Trash2, DollarSign } from 'lucide-react';
-import type { Database } from '@/types/database';
-import type { RouteStatus, DifficultyLevel } from '@/types/database';
+import { useAuth } from '@/context/AuthContext';
 
-type Route = Database['public']['Tables']['routes']['Row'] & {
-  users?: {
-    full_name: string;
-    email: string;
+type Route = {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  distancia: number;
+  dificultad: 'facil' | 'moderado' | 'dificil' | 'experto';
+  precio: number;
+  estado: 'borrador' | 'pendiente_aprobacion' | 'aprobada' | 'rechazada' | 'inactiva';
+  creador: {
+    nombre: string;
   };
+  created_at: string;
+  total_sales: number;
 };
 
 export default function RoutesManagement() {
   const queryClient = useQueryClient();
+  const { token } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
 
   // Fetch routes with creator info
-  const { data: routes, isLoading } = useQuery({
+  const { data: routes, isLoading } = useQuery<Route[]>({
     queryKey: ['admin-routes', searchTerm, statusFilter, difficultyFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('routes')
-        .select(`
-          *,
-          users:creator_id (
-            full_name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false });
+      if (!token) throw new Error('No token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/routes`, {
+        headers: {
+          'x-auth-token': token,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch routes');
+      let data = await response.json();
 
       if (searchTerm) {
-        query = query.ilike('title', `%${searchTerm}%`);
+        data = data.filter((route: Route) =>
+          route.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+        );
       }
 
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        data = data.filter((route: Route) => route.estado === statusFilter);
       }
 
       if (difficultyFilter !== 'all') {
-        query = query.eq('difficulty', difficultyFilter);
+        data = data.filter((route: Route) => route.dificultad === difficultyFilter);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Route[];
+      return data;
     },
+    enabled: !!token,
   });
 
-  // Approve route
-  const approveRoute = useMutation({
-    mutationFn: async (routeId: string) => {
-      const { error } = await supabase
-        .from('routes')
-        .update({ 
-          status: 'aprobada',
-          published_at: new Date().toISOString(),
-        })
-        .eq('id', routeId);
+  // Update route status
+  const updateRouteStatus = useMutation({
+    mutationFn: async ({ routeId, status }: { routeId: string; status: string }) => {
+      if (!token) throw new Error('No token');
+      const response = await fetch(`/api/admin/routes/${routeId}/status`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token,
+          },
+          body: JSON.stringify({ estado: status }),
+        }
+      );
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-routes'] });
-    },
-  });
-
-  // Reject route
-  const rejectRoute = useMutation({
-    mutationFn: async (routeId: string) => {
-      const { error } = await supabase
-        .from('routes')
-        .update({ status: 'rechazada' })
-        .eq('id', routeId);
-
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Failed to update route status');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-routes'] });
@@ -95,12 +92,19 @@ export default function RoutesManagement() {
   // Delete route
   const deleteRoute = useMutation({
     mutationFn: async (routeId: string) => {
-      const { error } = await supabase
-        .from('routes')
-        .delete()
-        .eq('id', routeId);
+      if (!token) throw new Error('No token');
+      const response = await fetch(`/api/admin/routes/${routeId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'x-auth-token': token,
+          },
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Failed to delete route');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-routes'] });
@@ -221,35 +225,34 @@ export default function RoutesManagement() {
                 <TableRow key={route.id}>
                   <TableCell>
                     <div>
-                      <p className="font-medium text-gray-900">{route.title}</p>
+                      <p className="font-medium text-gray-900">{route.nombre}</p>
                       <p className="text-sm text-gray-500">
-                        {route.description?.substring(0, 50)}...
+                        {route.descripcion?.substring(0, 50)}...
                       </p>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="text-sm text-gray-900">{route.users?.full_name}</p>
-                      <p className="text-xs text-gray-500">{route.users?.email}</p>
+                      <p className="text-sm text-gray-900">{route.creador.nombre}</p>
                     </div>
                   </TableCell>
-                  <TableCell>{getDifficultyBadge(route.difficulty)}</TableCell>
-                  <TableCell className="text-gray-600">{route.distance_km} km</TableCell>
+                  <TableCell>{getDifficultyBadge(route.dificultad)}</TableCell>
+                  <TableCell className="text-gray-600">{route.distancia} km</TableCell>
                   <TableCell className="text-gray-900 font-medium">
-                    ${route.price.toFixed(2)}
+                                        ${(typeof route.precio === 'number' ? route.precio : 0).toFixed(2)}
                   </TableCell>
-                  <TableCell>{getStatusBadge(route.status)}</TableCell>
+                  <TableCell>{getStatusBadge(route.estado)}</TableCell>
                   <TableCell className="text-gray-600">{route.total_sales}</TableCell>
                   <TableCell className="text-gray-600 text-sm">
                     {new Date(route.created_at).toLocaleDateString('es-MX')}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {route.status === 'pendiente_aprobacion' && (
+                      {route.estado === 'pendiente_aprobacion' && (
                         <>
                           <button
                             type="button"
-                            onClick={() => approveRoute.mutate(route.id)}
+                            onClick={() => updateRouteStatus.mutate({ routeId: route.id, status: 'aprobada' })}
                             className="p-2 hover:bg-green-50 rounded-lg transition-colors"
                             title="Aprobar"
                           >
@@ -259,7 +262,7 @@ export default function RoutesManagement() {
                             type="button"
                             onClick={() => {
                               if (confirm('¿Estás seguro de rechazar esta ruta?')) {
-                                rejectRoute.mutate(route.id);
+                                updateRouteStatus.mutate({ routeId: route.id, status: 'rechazada' });
                               }
                             }}
                             className="p-2 hover:bg-red-50 rounded-lg transition-colors"

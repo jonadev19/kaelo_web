@@ -101,3 +101,248 @@ Endpoints para la gestión y monitoreo de la plataforma. Requieren un rol de `Ad
       "totalSales": 1250.75
     }
     ```
+
+### Gestión de Usuarios
+
+### Obtener todos los usuarios
+
+-   **Método:** `GET`
+-   **URL:** `/api/admin/users`
+-   **Descripción:** Retorna una lista de todos los usuarios registrados en la plataforma.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    [
+      {
+        "id": 1,
+        "nombre": "Juan Pérez",
+        "email": "juan@example.com",
+        "rol": "Ciclista",
+        "createdAt": "2023-10-27T10:00:00.000Z",
+        "updatedAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
+
+### Crear un nuevo usuario
+
+-   **Método:** `POST`
+-   **URL:** `/api/admin/users`
+-   **Descripción:** Crea un nuevo usuario. Útil para registrar administradores o comerciantes manualmente.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Body (Request):**
+    ```json
+    {
+      "nombre": "Nuevo Usuario",
+      "email": "nuevo@example.com",
+      "password": "password123",
+      "rol": "Comerciante"
+    }
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Usuario creado exitosamente"
+    }
+    ```
+
+### Actualizar un usuario
+
+-   **Método:** `PUT`
+-   **URL:** `/api/admin/users/:id`
+-   **Descripción:** Modifica la información de un usuario existente.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Body (Request):**
+    ```json
+    {
+      "nombre": "Nombre Actualizado",
+      "email": "email_actualizado@example.com",
+      "rol": "Creador de Ruta"
+    }
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Usuario actualizado exitosamente"
+    }
+    ```
+
+### Eliminar un usuario
+
+-   **Método:** `DELETE`
+-   **URL:** `/api/admin/users/:id`
+-   **Descripción:** Elimina un usuario de la base de datos.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Usuario eliminado exitosamente"
+    }
+    ```
+
+### Gestión de Rutas
+
+### Obtener todas las rutas
+
+-   **Método:** `GET`
+-   **URL:** `/api/admin/routes`
+-   **Descripción:** Retorna una lista de todas las rutas de la plataforma, incluyendo la información de su creador.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    [
+      {
+        "id": 1,
+        "nombre": "Ruta del Sol",
+        "descripcion": "Una hermosa ruta por la costa.",
+        "distancia": 25.5,
+        "dificultad": "Intermedia",
+        "precio": 10.00,
+        "estado": "pendiente",
+        "creador": {
+          "nombre": "Carlos Ruiz"
+        }
+      }
+    ]
+    ```
+
+### Actualizar estado de una ruta
+
+-   **Método:** `PUT`
+-   **URL:** `/api/admin/routes/:id/status`
+-   **Descripción:** Permite al administrador aprobar o rechazar una ruta pendiente.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Body (Request):**
+    ```json
+    {
+      "estado": "aprobada" // o "rechazada"
+    }
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Ruta aprobada exitosamente"
+    }
+    ```
+
+### Eliminar una ruta
+
+-   **Método:** `DELETE`
+-   **URL:** `/api/admin/routes/:id`
+-   **Descripción:** Elimina una ruta de la plataforma.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Ruta eliminada exitosamente"
+    }
+    ```
+
+### Gestión de Comercios
+
+### Obtener todos los comercios
+
+-   **Método:** `GET`
+-   **URL:** `/api/admin/stores`
+-   **Descripción:** Retorna una lista de todos los comercios registrados.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    [
+      {
+        "id": 1,
+        "nombre": "Tienda de Ana",
+        "descripcion": "Venta de artesanías locales.",
+        "ubicacion": "Calle Principal 123",
+        "estado": "pendiente",
+        "propietario": {
+          "nombre": "Ana Gómez"
+        }
+      }
+    ]
+    ```
+
+### Actualizar estado de un comercio
+
+-   **Método:** `PUT`
+-   **URL:** `/api/admin/stores/:id/status`
+-   **Descripción:** Permite al administrador aprobar o desactivar un comercio.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Body (Request):**
+    ```json
+    {
+      "estado": "activo" // o "inactivo"
+    }
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    {
+      "msg": "Comercio activo exitosamente"
+    }
+    ```
+
+### Gestión de Transacciones
+
+### Obtener todas las transacciones
+
+-   **Método:** `GET`
+-   **URL:** `/api/admin/transactions`
+-   **Descripción:** Retorna una lista de todas las transacciones de la plataforma.
+-   **Acceso:** Privado (Solo `Admin`)
+-   **Headers (Request):**
+    ```
+    x-auth-token: <tu_jwt_de_admin>
+    ```
+-   **Respuesta Exitosa (200 OK):**
+    ```json
+    [
+      {
+        "id": 1,
+        "monto": 10.00,
+        "tipo": "compra_ruta",
+        "usuario": {
+          "nombre": "Juan Pérez",
+          "email": "juan@example.com"
+        },
+        "ruta": {
+          "nombre": "Ruta del Sol"
+        }
+      }
+    ]
+    ```

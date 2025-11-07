@@ -2,12 +2,14 @@
 
 import { createContext, useState, useEffect, ReactNode, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { jwtDecode } from 'jwt-decode';
 
 interface User {
   id: number;
   nombre: string;
   email: string;
   rol: string;
+  exp: number;
 }
 
 interface AuthContextType {
@@ -26,23 +28,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      // TODO: Fetch user data from API using the token
-      // For now, we'll use a mock user
-      setUser({ id: 1, nombre: 'Usuario de Prueba', email: 'test@example.com', rol: 'Ciclista' });
+    const storedUser = localStorage.getItem('user');
+
+    if (storedToken && storedUser) {
+      try {
+        const user: User = JSON.parse(storedUser);
+        const currentTime = Date.now() / 1000;
+
+        if (user.exp > currentTime) {
+          setToken(storedToken);
+          setUser(user);
+        } else {
+          // Token expired
+          logout();
+        }
+      } catch (error) {
+        console.error('Failed to parse stored user data', error);
+        logout();
+      }
+    } else if (storedToken && !storedUser) {
+      // Token exists but user data is missing, clear and logout
+      logout();
     }
   }, []);
 
   const login = (newToken: string) => {
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    // TODO: Fetch user data from API using the token
-    setUser({ id: 1, nombre: 'Usuario de Prueba', email: 'test@example.com', rol: 'Ciclista' });
+    try {
+      const decodedUser = jwtDecode<User>(newToken);
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(decodedUser));
+      setToken(newToken);
+      setUser(decodedUser);
+    } catch (error) {
+      console.error('Failed to decode token or login', error);
+      logout();
+    }
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
     setUser(null);
     router.push('/login');

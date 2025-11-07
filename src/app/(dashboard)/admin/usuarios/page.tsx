@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -12,13 +11,20 @@ import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { UserFormModal } from '@/components/admin/UserFormModal';
 import { Search, UserPlus, Edit, Trash2, Ban, CheckCircle } from 'lucide-react';
-import type { Database } from '@/types/database';
-import type { UserRole } from '@/types/database';
+import { useAuth } from '@/context/AuthContext';
 
-type User = Database['public']['Tables']['users']['Row'];
+type User = {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: 'ciclista' | 'comerciante' | 'creador_ruta' | 'administrador';
+  is_active: boolean;
+  created_at: string;
+};
 
 export default function UsersManagement() {
   const queryClient = useQueryClient();
+  const { token } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -27,47 +33,52 @@ export default function UsersManagement() {
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   // Fetch users
-  const { data: users, isLoading } = useQuery({
+  const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ['users', searchTerm, roleFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (!token) throw new Error('No token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
+        headers: {
+          'x-auth-token': token,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch users');
+      let data = await response.json();
 
       if (searchTerm) {
-        query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        data = data.filter((user: User) =>
+          user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchTerm.toLowerCase())
+        );
       }
 
       if (roleFilter !== 'all') {
-        query = query.eq('role', roleFilter);
+        data = data.filter((user: User) => user.rol === roleFilter);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
       return data;
     },
+    enabled: !!token,
   });
 
   // Create/Update user
   const saveUser = useMutation({
     mutationFn: async (userData: any) => {
-      if (selectedUser) {
-        // Update existing user
-        const { error } = await supabase
-          .from('users')
-          .update(userData)
-          .eq('id', selectedUser.id);
-        if (error) throw error;
-      } else {
-        // Create new user with a default password hash
-        const { error } = await supabase
-          .from('users')
-          .insert({
-            ...userData,
-            password_hash: '$2a$10$defaulthash', // In production, implement proper password hashing
-          });
-        if (error) throw error;
+      if (!token) throw new Error('No token');
+      const url = selectedUser ? `/api/admin/users/${selectedUser.id}` : '/api/admin/users';
+      const method = selectedUser ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token,
+        },
+        body: JSON.stringify(userData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save user');
       }
     },
     onSuccess: () => {
@@ -80,11 +91,21 @@ export default function UsersManagement() {
   // Toggle user active status
   const toggleUserStatus = useMutation({
     mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from('users')
-        .update({ is_active: !isActive })
-        .eq('id', userId);
-      if (error) throw error;
+      if (!token) throw new Error('No token');
+      const response = await fetch(`/api/admin/users/${userId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token,
+          },
+          body: JSON.stringify({ is_active: !isActive }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle user status');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -94,11 +115,19 @@ export default function UsersManagement() {
   // Delete user
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
-      if (error) throw error;
+      if (!token) throw new Error('No token');
+      const response = await fetch(`/api/admin/users/${userId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'x-auth-token': token,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete user');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -216,11 +245,11 @@ export default function UsersManagement() {
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium text-gray-600">
-                              {user.full_name.charAt(0).toUpperCase()}
+                              {user.full_name ? user.full_name.charAt(0).toUpperCase() : ''}
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{user.full_name}</p>
+                            <p className="font-medium text-gray-900">{user.nombre}</p>
                           </div>
                         </div>
                       </TableCell>

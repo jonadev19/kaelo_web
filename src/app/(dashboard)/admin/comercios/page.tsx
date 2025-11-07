@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -10,107 +9,75 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { Search, Eye, CheckCircle, XCircle, Trash2, Ban } from 'lucide-react';
-import type { Database } from '@/types/database';
-import type { StoreStatus } from '@/types/database';
+import { useAuth } from '@/context/AuthContext';
 
-type Store = Database['public']['Tables']['stores']['Row'] & {
-  users?: {
-    full_name: string;
-    email: string;
+type Store = {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  ubicacion: string;
+  estado: 'pendiente' | 'activo' | 'inactivo';
+  propietario: {
+    nombre: string;
   };
+  created_at: string;
+  total_orders: number;
+  average_rating: number;
+  phone: string;
 };
 
 export default function StoresManagement() {
   const queryClient = useQueryClient();
+  const { token } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Fetch stores with owner info
-  const { data: stores, isLoading } = useQuery({
+  const { data: stores, isLoading } = useQuery<Store[]>({
     queryKey: ['admin-stores', searchTerm, statusFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('stores')
-        .select(`
-          *,
-          users:owner_id (
-            full_name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false });
+      if (!token) throw new Error('No token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/stores`, {
+        headers: {
+          'x-auth-token': token,
+        },
+      });
+      if (!response.ok) throw new Error('Failed to fetch stores');
+      let data = await response.json();
 
       if (searchTerm) {
-        query = query.ilike('name', `%${searchTerm}%`);
+        data = data.filter((store: Store) =>
+          store.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+        );
       }
 
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        data = data.filter((store: Store) => store.estado === statusFilter);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Store[];
+      return data;
     },
+    enabled: !!token,
   });
 
-  // Approve store
-  const approveStore = useMutation({
-    mutationFn: async (storeId: string) => {
-      const { error } = await supabase
-        .from('stores')
-        .update({ 
-          status: 'aprobado',
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', storeId);
+  // Update store status
+  const updateStoreStatus = useMutation({
+    mutationFn: async ({ storeId, status }: { storeId: string; status: string }) => {
+      if (!token) throw new Error('No token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/stores/${storeId}/status`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token,
+          },
+          body: JSON.stringify({ estado: status }),
+        }
+      );
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
-    },
-  });
-
-  // Reject store
-  const rejectStore = useMutation({
-    mutationFn: async (storeId: string) => {
-      const { error } = await supabase
-        .from('stores')
-        .update({ status: 'rechazado' })
-        .eq('id', storeId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
-    },
-  });
-
-  // Suspend store
-  const suspendStore = useMutation({
-    mutationFn: async (storeId: string) => {
-      const { error } = await supabase
-        .from('stores')
-        .update({ status: 'suspendido' })
-        .eq('id', storeId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
-    },
-  });
-
-  // Delete store
-  const deleteStore = useMutation({
-    mutationFn: async (storeId: string) => {
-      const { error } = await supabase
-        .from('stores')
-        .delete()
-        .eq('id', storeId);
-
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Failed to update store status');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
@@ -203,25 +170,24 @@ export default function StoresManagement() {
                 <TableRow key={store.id}>
                   <TableCell>
                     <div>
-                      <p className="font-medium text-gray-900">{store.name}</p>
+                      <p className="font-medium text-gray-900">{store.nombre}</p>
                       <p className="text-sm text-gray-500">{store.phone}</p>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="text-sm text-gray-900">{store.users?.full_name}</p>
-                      <p className="text-xs text-gray-500">{store.users?.email}</p>
+                      <p className="text-sm text-gray-900">{store.propietario.nombre}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-gray-600 text-sm max-w-xs truncate">
-                    {store.address || 'N/A'}
+                    {store.ubicacion || 'N/A'}
                   </TableCell>
-                  <TableCell>{getStatusBadge(store.status)}</TableCell>
+                  <TableCell>{getStatusBadge(store.estado)}</TableCell>
                   <TableCell className="text-gray-600">{store.total_orders}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <span className="text-yellow-500">★</span>
-                      <span className="text-gray-900">{store.average_rating.toFixed(1)}</span>
+                      <span className="text-gray-900">{(store.average_rating || 0).toFixed(1)}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-gray-600 text-sm">
@@ -229,11 +195,11 @@ export default function StoresManagement() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {store.status === 'pendiente_aprobacion' && (
+                      {store.estado === 'pendiente' && (
                         <>
                           <button
                             type="button"
-                            onClick={() => approveStore.mutate(store.id)}
+                            onClick={() => updateStoreStatus.mutate({ storeId: store.id, status: 'activo' })}
                             className="p-2 hover:bg-green-50 rounded-lg transition-colors"
                             title="Aprobar"
                           >
@@ -243,7 +209,7 @@ export default function StoresManagement() {
                             type="button"
                             onClick={() => {
                               if (confirm('¿Estás seguro de rechazar este comercio?')) {
-                                rejectStore.mutate(store.id);
+                                updateStoreStatus.mutate({ storeId: store.id, status: 'inactivo' });
                               }
                             }}
                             className="p-2 hover:bg-red-50 rounded-lg transition-colors"
@@ -253,12 +219,12 @@ export default function StoresManagement() {
                           </button>
                         </>
                       )}
-                      {store.status === 'aprobado' && (
+                      {store.estado === 'activo' && (
                         <button
                           type="button"
                           onClick={() => {
                             if (confirm('¿Estás seguro de suspender este comercio?')) {
-                              suspendStore.mutate(store.id);
+                              updateStoreStatus.mutate({ storeId: store.id, status: 'inactivo' });
                             }
                           }}
                           className="p-2 hover:bg-orange-50 rounded-lg transition-colors"
@@ -273,18 +239,6 @@ export default function StoresManagement() {
                         title="Ver detalles"
                       >
                         <Eye size={16} className="text-blue-600" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm('¿Estás seguro de eliminar este comercio?')) {
-                            deleteStore.mutate(store.id);
-                          }
-                        }}
-                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={16} className="text-red-600" />
                       </button>
                     </div>
                   </TableCell>
